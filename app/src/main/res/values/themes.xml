@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.ProjectPurr" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:statusBarColor">@color/purr_background</item>
+        <item name="android:navigationBarColor">@color/purr_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>
