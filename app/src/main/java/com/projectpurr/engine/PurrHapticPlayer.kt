@@ -50,12 +50,18 @@ class PurrHapticPlayer(context: Context) {
         }
     }
 
-    /** Long-session gentle taper; only applied while a loop is running. Updates are infrequent (engine-side). */
-    fun setSessionThermalMultiplier(multiplier: Float) {
+    /**
+     * Long-session gentle taper. Queued and applied on the next natural loop restart
+     * (via [restartLoop]) so thermal changes don't break audio/haptic sync mid-waveform.
+     */
+    fun queueSessionThermalMultiplier(multiplier: Float) {
         sessionThermalMultiplier = multiplier.coerceIn(0f, 1f)
-        if (loopTimings != null) {
-            restartWaveform()
-        }
+        // Intentionally NOT calling restartWaveform() here.
+    }
+
+    /** Called by the engine at each loop boundary to keep haptic phase aligned with audio. */
+    fun restartLoop() {
+        if (loopTimings != null) restartWaveform()
     }
 
     fun stop() {
@@ -92,9 +98,9 @@ class PurrHapticPlayer(context: Context) {
                     else -> perceptualMotorAmp(a).coerceIn(1, MOTOR_ABS_CAP)
                 }
             }
-            VibrationEffect.createWaveform(timings, scaled, 0)
+            VibrationEffect.createWaveform(timings, scaled, -1)  // -1 = play once; engine re-triggers each loop
         } else {
-            VibrationEffect.createWaveform(timings, 0)
+            VibrationEffect.createWaveform(timings, -1)
         }
         vibrator.vibrate(effect)
     }
@@ -102,8 +108,8 @@ class PurrHapticPlayer(context: Context) {
     companion object {
         private const val CURVE_GAMMA = 0.62f
 
-        /** Slightly above max generated envelope so curve uses full-ish range below ceiling. */
-        private const val MAX_BASE_AMP_EXPECTED = 58f
+        /** Must match AMP_HI in generate_catpur_haptic_envelope.py so the full output range is used. */
+        private const val MAX_BASE_AMP_EXPECTED = 200f
 
         /** Hard ceiling on waveform amplitudes (below 255) to reduce motor heat across devices. */
         private const val MOTOR_ABS_CAP = 200

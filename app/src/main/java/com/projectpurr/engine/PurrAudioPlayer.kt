@@ -2,15 +2,24 @@ package com.projectpurr.engine
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.media.MediaPlayer
 import com.projectpurr.R
 
 /**
  * Looped purr audio: [R.raw.catpur1] (MP3). Duration must match [HouseCatProfile.PURR_LOOP_PERIOD_MS] for haptic sync.
+ *
+ * AudioFocus: call [requestAudioFocus] when the session starts and [abandonAudioFocus] when it stops.
+ * The caller-supplied callbacks are invoked on the AudioManager's handler thread — dispatch to
+ * the engine's coroutine scope before touching state.
  */
 class PurrAudioPlayer(context: Context) {
     private val app = context.applicationContext
     private var player: MediaPlayer? = null
+
+    private val audioManager = app.getSystemService(AudioManager::class.java)
+    private var focusRequest: AudioFocusRequest? = null
 
     fun prepareDefaultHouseCat() {
         if (player != null) return
@@ -24,7 +33,7 @@ class PurrAudioPlayer(context: Context) {
                         .build(),
                 )
                 setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-                isLooping = true
+                isLooping = false   // Engine drives loop restarts so audio + haptic stay in sync.
                 prepare()
                 setVolume(HouseCatProfile.AUDIO_TARGET_VOLUME, HouseCatProfile.AUDIO_TARGET_VOLUME)
             }
@@ -33,8 +42,13 @@ class PurrAudioPlayer(context: Context) {
         }
     }
 
-    /** Reported loop length (ms). Compare to [HouseCatProfile.PURR_LOOP_PERIOD_MS] when tuning a new asset. */
-    fun loopDurationMs(): Int = player?.duration?.takeIf { it > 0 } ?: -1
+    /**
+     * Registers a callback fired each time the audio reaches its natural end.
+     * The engine uses this to restart both audio and haptic together, keeping them in sync.
+     */
+    fun setOnLoopComplete(callback: () -> Unit) {
+        player?.setOnCompletionListener { callback() }
+    }
 
     /** Aligns playback phase with the haptic loop (call before [start] each session). */
     fun seekToLoopStart() {
@@ -58,7 +72,49 @@ class PurrAudioPlayer(context: Context) {
         setLinearVolume(HouseCatProfile.AUDIO_TARGET_VOLUME)
     }
 
+    // ── AudioFocus ────────────────────────────────────────────────────────────
+
+    /**
+     * Requests audio focus for media playback.
+     * [onFocusLost] is called when a phone call or other app takes focus — pause the session.
+     * [onFocusGained] is called when focus returns — resume if the session was interrupted.
+     * Both callbacks arrive on the AudioManager's handler thread; dispatch before touching UI state.
+     */
+    fun requestAudioFocus(onFocusLost: () -> Unit, onFocusGained: () -> Unit) {
+        val attrs = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            .build()
+
+        val listener = AudioManager.OnAudioFocusChangeListener { change ->
+            when (change) {
+                AudioManager.AUDIOFOCUS_LOSS,
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> onFocusLost()
+                AudioManager.AUDIOFOCUS_GAIN                     -> onFocusGained()
+            }
+        }
+
+        val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            .setAudioAttributes(attrs)
+            .setAcceptsDelayedFocusGain(false)
+            .setOnAudioFocusChangeListener(listener)
+            .build()
+
+        focusRequest = req
+        audioManager.requestAudioFocus(req)
+    }
+
+    fun abandonAudioFocus() {
+        focusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+        focusRequest = null
+    }
+
+    /** Reported loop length (ms). Compare to [HouseCatProfile.PURR_LOOP_PERIOD_MS] when tuning a new asset. */
+    fun loopDurationMs(): Int = player?.duration?.takeIf { it > 0 } ?: -1
+
     fun release() {
+        abandonAudioFocus()
         player?.release()
         player = null
     }

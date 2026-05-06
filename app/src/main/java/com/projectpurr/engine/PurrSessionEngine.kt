@@ -31,8 +31,13 @@ class PurrSessionEngine(
     private var timerJob: Job? = null
     private var fadeJob: Job? = null
     private var thermalJob: Job? = null
+    private var loopSyncJob: Job? = null
 
     private var playStartElapsed: Long = 0L
+    private var sessionAnchorElapsed: Long = 0L   // wall-clock anchor for loop sync
+
+    /** True when audio focus was lost mid-session so we can auto-resume on GAIN. */
+    private var focusInterrupted = false
 
     /** Wall-clock deadline while playing; [Long.MAX_VALUE] when timer off. */
     private var timerDeadlineElapsed: Long = Long.MAX_VALUE
@@ -70,6 +75,7 @@ class PurrSessionEngine(
     }
 
     fun dispose() {
+        loopSyncJob?.cancel()
         timerJob?.cancel()
         fadeJob?.cancel()
         thermalJob?.cancel()
@@ -78,6 +84,8 @@ class PurrSessionEngine(
     }
 
     private fun startSession() {
+        loopSyncJob?.cancel()
+        loopSyncJob = null
         fadeJob?.cancel()
         fadeJob = null
         timerJob?.cancel()
@@ -86,16 +94,84 @@ class PurrSessionEngine(
 
         _state.update { it.copy(phase = SessionPhase.PLAYING) }
 
-        // Same loop period as [HouseCatProfile.PURR_LOOP_PERIOD_MS] / WAV length so haptics and audio re-align each cycle.
+        // Anchor both clocks at the same instant so haptic and audio stay phase-locked.
+        sessionAnchorElapsed = SystemClock.elapsedRealtime()
         audio.seekToLoopStart()
-        applyAudioForSilentFlag()
         haptics.startLoop(HouseCatProfile.loopTimingsMs, HouseCatProfile.loopAmplitudesBase)
+        applyAudioForSilentFlag()
+
+        // Audio fires this callback when the MP3 reaches its natural end.
+        // We restart both audio and haptic together so they re-align each loop.
+        audio.setOnLoopComplete {
+            scope.launch { onAudioLoopComplete() }
+        }
+
+        focusInterrupted = false
+        audio.requestAudioFocus(
+            onFocusLost  = { scope.launch { handleFocusLost() } },
+            onFocusGained = { scope.launch { handleFocusGained() } },
+        )
 
         armSleepTimer()
         startThermalWatcher()
     }
 
+    /**
+     * Fires at the natural end of each audio loop.  Restarts audio (from position 0) and haptic
+     * together so the fade encoded at the end of the waveform always lines up with the audio fade.
+     *
+     * In Silent Purr mode the audio is paused so this callback never fires — [loopSyncJob] takes
+     * over and restarts the haptic on the same period so the waveform keeps cycling.
+     */
+    private fun onAudioLoopComplete() {
+        if (_state.value.phase != SessionPhase.PLAYING) return
+        audio.seekToLoopStart()
+        if (!_state.value.silentPurr) audio.start()
+        haptics.restartLoop()
+        // Reset the silent-purr fallback anchor so it doesn't double-fire.
+        sessionAnchorElapsed = SystemClock.elapsedRealtime()
+    }
+
+    /** Fallback loop sync for Silent Purr mode (audio is paused, so no completion callbacks). */
+    private fun startSilentPurrLoopSync() {
+        loopSyncJob?.cancel()
+        sessionAnchorElapsed = SystemClock.elapsedRealtime()
+        loopSyncJob = scope.launch {
+            while (isActive && _state.value.phase == SessionPhase.PLAYING) {
+                // Compute delay to the next exact multiple of the loop period from the anchor.
+                val elapsed = SystemClock.elapsedRealtime() - sessionAnchorElapsed
+                val nextBoundary = (elapsed / HouseCatProfile.PURR_LOOP_PERIOD_MS + 1) * HouseCatProfile.PURR_LOOP_PERIOD_MS
+                delay(nextBoundary - elapsed)
+                if (isActive && _state.value.phase == SessionPhase.PLAYING && _state.value.silentPurr) {
+                    haptics.restartLoop()
+                }
+            }
+        }
+    }
+
+    private fun handleFocusLost() {
+        if (_state.value.phase != SessionPhase.PLAYING) return
+        focusInterrupted = true
+        audio.pause()
+        haptics.stop()
+    }
+
+    private fun handleFocusGained() {
+        if (!focusInterrupted || _state.value.phase != SessionPhase.PLAYING) return
+        focusInterrupted = false
+        haptics.restartLoop()
+        sessionAnchorElapsed = SystemClock.elapsedRealtime()
+        if (!_state.value.silentPurr) {
+            audio.seekToLoopStart()
+            audio.start()
+        }
+    }
+
     private fun userStop() {
+        focusInterrupted = false
+        audio.abandonAudioFocus()
+        loopSyncJob?.cancel()
+        loopSyncJob = null
         fadeJob?.cancel()
         fadeJob = null
         timerJob?.cancel()
@@ -150,10 +226,19 @@ class PurrSessionEngine(
         if (_state.value.silentPurr) {
             audio.pause()
             audio.setLinearVolume(0f)
+            // Audio completion callbacks won't fire while paused; use timer-based haptic sync instead.
+            if (_state.value.phase == SessionPhase.PLAYING) startSilentPurrLoopSync()
         } else {
+            loopSyncJob?.cancel()
+            loopSyncJob = null
             audio.resetVolumeToTarget()
             if (_state.value.phase == SessionPhase.PLAYING) {
+                // Re-align both clocks: audio was paused (unknown position), haptic was looping on
+                // the timer.  Restart both from position 0 so they're immediately back in sync.
+                haptics.restartLoop()
+                audio.seekToLoopStart()
                 audio.start()
+                sessionAnchorElapsed = SystemClock.elapsedRealtime()
             }
         }
     }
@@ -183,6 +268,8 @@ class PurrSessionEngine(
 
     private fun beginFadeOutFromTimer() {
         if (_state.value.phase != SessionPhase.PLAYING) return
+        loopSyncJob?.cancel()
+        loopSyncJob = null
         timerJob?.cancel()
         fadeJob?.cancel()
         thermalJob?.cancel()
@@ -226,7 +313,8 @@ class PurrSessionEngine(
                 delay(THERMAL_TICK_MS)
                 if (_state.value.phase != SessionPhase.PLAYING) break
                 val mins = (SystemClock.elapsedRealtime() - playStartElapsed) / 60_000f
-                haptics.setSessionThermalMultiplier(thermalMultiplierForPlayMinutes(mins))
+                // Queue (don't restart mid-waveform) — applied on the next natural loop boundary.
+                haptics.queueSessionThermalMultiplier(thermalMultiplierForPlayMinutes(mins))
             }
         }
     }

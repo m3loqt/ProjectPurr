@@ -34,17 +34,24 @@ OUT = os.path.join(
     "app/src/main/java/com/projectpurr/engine/Catpur1AudioHapticEnvelope.kt",
 )
 
-ATTACK = 0.55
-RELEASE = 0.18
-GAMMA_MAP = 0.62
+ATTACK = 0.65
+RELEASE = 0.30
+# > 1.0 = expansive: quiet audio stays quiet, loud audio stays loud.
+# The original 0.62 was compressive (boosted quiet), which flattened the feel.
+GAMMA_MAP = 1.5
 NOISE_GATE_FRAC = 0.065
 
-AMP_LO_NONZERO = 20
-AMP_HI = 53
+AMP_LO_NONZERO = 0    # No floor: let the fade reach near-silence matching the audio.
+AMP_HI = 200  # Wider ceiling; MAX_BASE_AMP_EXPECTED in PurrHapticPlayer must match.
 
-# Extra shaping on sampled energy inside each tongue-tap pulse
-PULSE_GAMMA = 0.78
+# Extra shaping on sampled energy inside each tongue-tap pulse (1.0 = linear)
+PULSE_GAMMA = 1.0
 ENERGY_SILENCE = 0.012
+
+# Breath-cycle modulation: cats breathe while purring, creating clear swells.
+# 5 even cycles divides 14760 ms cleanly (2952 ms each ≈ 0.34 Hz / ~20 breaths/min).
+BREATH_CYCLES = 5
+BREATH_DEPTH = 0.50  # 0.0 = flat, 1.0 = silent at troughs
 
 
 def ensure_wav() -> None:
@@ -151,12 +158,6 @@ def main() -> None:
             t = math.pow(t, GAMMA_MAP)
             normed.append(t)
 
-    for i in range(nbins):
-        if normed[i] <= 0.0:
-            continue
-        normed[i] *= 0.90 + 0.10 * (0.5 + 0.5 * math.sin(2 * math.pi * (i / nbins * 6.25)))
-
-    normed = circular_smooth(normed, passes=3)
     mask_f = [1.0 if m else 0.0 for m in mask_on]
 
     total_ms = nbins * BIN_MS
@@ -166,6 +167,18 @@ def main() -> None:
         )
 
     ncycles = total_ms // CARRIER_CYCLE_MS
+
+    # Breath-cycle modulation: multiply envelope by a slow cosine that simulates a cat
+    # inhaling and exhaling while purring.  BREATH_CYCLES even divisions of total_ms
+    # guarantee the pattern loops seamlessly with the audio.
+    breath_period_ms = total_ms / BREATH_CYCLES
+    for i in range(len(normed)):
+        if normed[i] <= 0.0:
+            continue
+        t_ms = float(i * BIN_MS)
+        # cosine: 1.0 at peak, (1 - BREATH_DEPTH) at trough
+        breath = 1.0 - BREATH_DEPTH * 0.5 * (1.0 - math.cos(2 * math.pi * t_ms / breath_period_ms))
+        normed[i] = min(1.0, normed[i] * breath)
 
     timings: list[int] = []
     amps: list[int] = []
@@ -190,9 +203,12 @@ def main() -> None:
         pulse = int(round(AMP_LO_NONZERO + tt * (AMP_HI - AMP_LO_NONZERO)))
         pulse = max(AMP_LO_NONZERO, min(AMP_HI, pulse))
 
-        timings.append(PULSE_ON_MS)
+        # Variable pulse width: 4 ms (quiet) → 10 ms (loud).  Changes texture not just amplitude.
+        pulse_on_ms = 4 + round(6 * tt)          # 4–10 ms
+        pulse_rest_ms = CARRIER_CYCLE_MS - pulse_on_ms  # 14–20 ms
+        timings.append(pulse_on_ms)
         amps.append(pulse)
-        timings.append(REST_MS)
+        timings.append(pulse_rest_ms)
         amps.append(0)
         taps += 1
 
@@ -236,7 +252,7 @@ def main() -> None:
         " */",
         "object Catpur1AudioHapticEnvelope {",
         f"    const val CARRIER_CYCLE_MS: Long = {CARRIER_CYCLE_MS}L",
-        f"    /** ON pulse width inside each articulation-ish cycle (~{PULSE_ON_MS} ms). */",
+        f"    /** Nominal ON pulse width; actual widths vary 4–10 ms per cycle by amplitude. */",
         f"    const val PULSE_ON_MS: Long = {PULSE_ON_MS}L",
         "    /** One playback loop duration (matches MP3 loop). */",
         f"    const val TOTAL_MS: Long = {total_ms}L",

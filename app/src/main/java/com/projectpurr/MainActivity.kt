@@ -5,17 +5,30 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.projectpurr.engine.SessionPhase
-import com.projectpurr.ui.PurrScreen
+import com.projectpurr.ui.HomeScreen
+import com.projectpurr.ui.OnboardingScreen
+import com.projectpurr.ui.SessionScreen
+import com.projectpurr.ui.theme.ColorBackground
 import com.projectpurr.ui.theme.ProjectPurrTheme
+
+private const val ROUTE_ONBOARDING = "onboarding"
+private const val ROUTE_HOME       = "home"
+private const val ROUTE_SESSION    = "session"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -25,11 +38,18 @@ class MainActivity : ComponentActivity() {
             val view = LocalView.current
             val vm: PurrViewModel = viewModel()
             val state by vm.uiState.collectAsState()
+            val onboarding by vm.onboardingComplete.collectAsState()
 
             SideEffect {
-                val lowVisual =
-                    state.chestMode &&
-                        (state.phase == SessionPhase.PLAYING || state.phase == SessionPhase.FADING)
+                val sessionActive =
+                    state.phase == SessionPhase.PLAYING || state.phase == SessionPhase.FADING
+                if (sessionActive) {
+                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                } else {
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
+
+                val lowVisual = state.chestMode && sessionActive
                 window.attributes = window.attributes.apply {
                     screenBrightness = if (lowVisual) {
                         0.08f
@@ -50,13 +70,56 @@ class MainActivity : ComponentActivity() {
             }
 
             ProjectPurrTheme {
-                PurrScreen(
-                    state = state,
-                    onTogglePlay = vm::togglePlay,
-                    onSilentChange = vm::setSilentPurr,
-                    onChestModeChange = vm::setChestMode,
-                    onSleepTimerChange = vm::setSleepTimer,
-                )
+                val navController = rememberNavController()
+
+                // Blank slate while DataStore resolves onboarding state (~50 ms first launch).
+                if (onboarding == null) {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = ColorBackground,
+                    ) {}
+                } else {
+                    val startDestination =
+                        if (onboarding == false) ROUTE_ONBOARDING else ROUTE_HOME
+
+                    NavHost(
+                        navController = navController,
+                        startDestination = startDestination,
+                    ) {
+                        composable(ROUTE_ONBOARDING) {
+                            OnboardingScreen(
+                                onGetStarted = {
+                                    vm.completeOnboarding()
+                                    navController.navigate(ROUTE_HOME) {
+                                        popUpTo(ROUTE_ONBOARDING) { inclusive = true }
+                                    }
+                                },
+                            )
+                        }
+
+                        composable(ROUTE_HOME) {
+                            HomeScreen(
+                                onSelectHouseCat = {
+                                    navController.navigate(ROUTE_SESSION)
+                                },
+                            )
+                        }
+
+                        composable(ROUTE_SESSION) {
+                            SessionScreen(
+                                state = state,
+                                onBack = {
+                                    if (state.isSessionActive) vm.togglePlay()
+                                    navController.popBackStack()
+                                },
+                                onTogglePlay = vm::togglePlay,
+                                onSilentChange = vm::setSilentPurr,
+                                onChestModeChange = vm::setChestMode,
+                                onSleepTimerChange = vm::setSleepTimer,
+                            )
+                        }
+                    }
+                }
             }
         }
     }
