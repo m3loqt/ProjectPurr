@@ -6,25 +6,25 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 // ── Base ──────────────────────────────────────────────────────────────────────
-val ColorBackground     = Color(0xFF0F0B08)   // deep warm black
-val ColorSurface        = Color(0xFF1A1410)   // card base
-val ColorSurfaceVariant = Color(0xFF241C15)   // elevated surface
+val ColorBackground     = Color(0xFF0D0B0A)   // deeper charcoal-warm black
+val ColorSurface        = Color(0xFF171210)   // softened card base
+val ColorSurfaceVariant = Color(0xFF211A15)   // elevated surface
 
 // ── Amber accent ──────────────────────────────────────────────────────────────
 val ColorPrimary        = Color(0xFFE09040)   // warm amber (cat-eye / candlelight)
 val ColorPrimaryDim     = Color(0xFFA06428)   // pressed / secondary action
-val ColorPrimaryGlow    = Color(0x26E09040)   // 15 % opacity — glow behind play button
+val ColorPrimaryGlow    = Color(0x22E09040)   // restrained amber glow
 val ColorOnPrimary      = Color(0xFF0F0B08)   // text on amber button
 
 // ── Text ──────────────────────────────────────────────────────────────────────
 val ColorOnBackground   = Color(0xFFF5EAD8)   // warm cream (primary text)
 val ColorOnSurface      = Color(0xFFF0E0C8)   // text on cards
-val ColorTextSecondary  = Color(0xFF9C8068)   // labels, metadata
-val ColorTextTertiary   = Color(0xFF6A5040)   // placeholders, very dim
+val ColorTextSecondary  = Color(0xFFA28870)   // labels, metadata
+val ColorTextTertiary   = Color(0xFF725748)   // placeholders, very dim
 
 // ── Glass surface helpers (used in GlassCard) ─────────────────────────────────
-val ColorGlassFill      = Color(0x12FFEEDD)   // warm white @ 7 %
-val ColorGlassBorder    = Color(0x1FFFEEDD)   // warm white @ 12 %
+val ColorGlassFill      = Color(0x14FFEED6)   // warm white @ ~8 %
+val ColorGlassBorder    = Color(0x24FFEED6)   // warm white @ ~14 %
 
 // ── Scheme ────────────────────────────────────────────────────────────────────
 private val PurrDark = darkColorScheme(

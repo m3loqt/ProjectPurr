@@ -1,5 +1,35 @@
 # Project Purr — Design System
 
+## Phase 2A — Premium Ritual Direction
+
+Phase 1C validated the sensory illusion. Phase 2A is about emotional product quality, not feature growth.
+
+### Intent
+
+Project Purr should feel like a warm, trusted nighttime companion. The interface supports the ritual, then fades away.
+
+### What changes in Phase 2A
+
+- Prioritize atmosphere over information density.
+- Prioritize emotional comfort over feature visibility.
+- Prioritize soft continuity over energetic interactions.
+- Keep controls available but visually secondary during active sessions.
+
+### Emotional qualities to preserve
+
+- Deep dark atmosphere with gentle warm highlights.
+- Low visual noise and restrained chrome.
+- Calm typography and generous spacing.
+- Slow, ambient motion (fades, breathing glows, soft transitions).
+
+### Explicit anti-patterns (still prohibited)
+
+- Sleep dashboard language, quantified-self framing, and data-heavy surfaces.
+- Bright/neon accents, hard contrast spikes, and flashy animation.
+- Feature expansion outside scope (accounts, subscriptions, social, analytics, multi-profile systems).
+
+---
+
 ## On the color question
 
 The reference app's dark navy + electric blue palette is excellent for a *meditation/sleep tech* product. But Project Purr is not that. It is tactile, warm, intimate — *a cat on your chest at 2am*. Blue reads as cool, clinical, digital. It would make Purr look like every other wellness app on the store.

@@ -1,6 +1,7 @@
 package com.projectpurr.ui
 
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,8 +11,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -27,13 +29,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.projectpurr.R
 import com.projectpurr.ui.theme.ColorOnBackground
 import com.projectpurr.ui.theme.ColorPrimary
-import com.projectpurr.ui.theme.ColorTextSecondary
 import kotlinx.coroutines.launch
 
 private data class OnboardingSlide(
@@ -42,25 +48,35 @@ private data class OnboardingSlide(
     val heroLine2: String = "",
     val heroLine2Amber: Boolean = false,
     val body: String,
+    val imageContentDescription: String,
+)
+
+private val OnboardingHeroDrawables = listOf(
+    R.drawable.onboarding_hero_1,
+    R.drawable.onboarding_hero_2,
+    R.drawable.onboarding_hero_3,
 )
 
 private val SLIDES = listOf(
     OnboardingSlide(
         heroLine1 = "Feel it.",
         heroLine1Amber = true,
-        body = "Not just sound. Real vibration — the way your cat says: I'm here.",
+        body = "Not just sound. A soft presence you can rest with.",
+        imageContentDescription = "Cat in moonlight, calm night scene.",
     ),
     OnboardingSlide(
-        heroLine1 = "Place your phone",
-        heroLine2 = "on your chest.",
+        heroLine1 = "Settle in.",
+        heroLine2 = "Let it purr.",
         heroLine2Amber = true,
-        body = "Close your eyes. The purr will do the rest.",
+        body = "Place your phone on your chest and breathe slowly.",
+        imageContentDescription = "Cat resting in warm dim light.",
     ),
     OnboardingSlide(
-        heroLine1 = "Your House Cat",
-        heroLine2 = "is waiting.",
+        heroLine1 = "Quiet comfort",
+        heroLine2 = "anytime.",
         heroLine2Amber = true,
-        body = "Tap play whenever you need it. No routine required.",
+        body = "A warm ritual for moments that feel heavy or lonely.",
+        imageContentDescription = "Sleeping cat curled up in cozy darkness.",
     ),
 )
 
@@ -71,68 +87,88 @@ fun OnboardingScreen(onGetStarted: () -> Unit) {
 
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background,
+        color = Color(0xFF070605),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .systemBarsPadding()
-                .padding(horizontal = 32.dp),
-        ) {
-            // Skip link — only visible before last slide
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                contentAlignment = Alignment.CenterEnd,
-            ) {
-                if (pagerState.currentPage < SLIDES.lastIndex) {
-                    TextButton(onClick = onGetStarted) {
+        Box(Modifier.fillMaxSize()) {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+            ) { page ->
+                val slide = SLIDES[page]
+                Box(Modifier.fillMaxSize()) {
+                    Image(
+                        painter = painterResource(OnboardingHeroDrawables[page]),
+                        contentDescription = slide.imageContentDescription,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colorStops = arrayOf(
+                                        0f to Color.Black.copy(alpha = 0.52f),
+                                        0.22f to Color.Black.copy(alpha = 0.06f),
+                                        0.58f to Color.Black.copy(alpha = 0.10f),
+                                        1f to Color(0xFF070605).copy(alpha = 0.90f),
+                                    ),
+                                ),
+                            ),
+                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 32.dp)
+                            .padding(bottom = 196.dp),
+                    ) {
+                        Spacer(Modifier.weight(1f))
+                        val hero = buildAnnotatedString {
+                            val c1 = if (slide.heroLine1Amber) ColorPrimary else ColorOnBackground
+                            withStyle(SpanStyle(color = c1)) { append(slide.heroLine1) }
+                            if (slide.heroLine2.isNotEmpty()) {
+                                append("\n")
+                                val c2 = if (slide.heroLine2Amber) ColorPrimary else ColorOnBackground
+                                withStyle(SpanStyle(color = c2)) { append(slide.heroLine2) }
+                            }
+                        }
+                        Text(text = hero, style = MaterialTheme.typography.displayLarge)
+                        Spacer(Modifier.height(22.dp))
                         Text(
-                            "Skip",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = ColorTextSecondary,
+                            text = slide.body,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = ColorOnBackground.copy(alpha = 0.82f),
                         )
                     }
                 }
             }
 
-            // Slides
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) { page ->
-                val slide = SLIDES[page]
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    val hero = buildAnnotatedString {
-                        val c1 = if (slide.heroLine1Amber) ColorPrimary else ColorOnBackground
-                        withStyle(SpanStyle(color = c1)) { append(slide.heroLine1) }
-                        if (slide.heroLine2.isNotEmpty()) {
-                            append("\n")
-                            val c2 = if (slide.heroLine2Amber) ColorPrimary else ColorOnBackground
-                            withStyle(SpanStyle(color = c2)) { append(slide.heroLine2) }
-                        }
+            // Skip — above imagery; top vignette keeps legibility
+            if (pagerState.currentPage < SLIDES.lastIndex) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .statusBarsPadding()
+                        .padding(top = 8.dp, end = 20.dp),
+                ) {
+                    TextButton(onClick = onGetStarted) {
+                        Text(
+                            "Skip",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = ColorOnBackground.copy(alpha = 0.82f),
+                        )
                     }
-                    Text(text = hero, style = MaterialTheme.typography.displayLarge)
-                    Spacer(Modifier.height(24.dp))
-                    Text(
-                        text = slide.body,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = ColorTextSecondary,
-                    )
                 }
             }
 
-            // Dots + CTA
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 48.dp),
+                    .fillMaxSize()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 32.dp)
+                    .padding(bottom = 36.dp),
+                verticalArrangement = Arrangement.Bottom,
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(28.dp),
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     repeat(SLIDES.size) { i ->
@@ -147,13 +183,13 @@ fun OnboardingScreen(onGetStarted: () -> Unit) {
                                 .width(w)
                                 .background(
                                     color = if (active) ColorPrimary
-                                    else ColorTextSecondary.copy(alpha = 0.35f),
+                                    else ColorOnBackground.copy(alpha = 0.28f),
                                     shape = CircleShape,
                                 ),
                         )
                     }
                 }
-
+                Spacer(Modifier.height(26.dp))
                 val isLast = pagerState.currentPage == SLIDES.lastIndex
                 Button(
                     onClick = {
@@ -175,7 +211,7 @@ fun OnboardingScreen(onGetStarted: () -> Unit) {
                     shape = MaterialTheme.shapes.large,
                 ) {
                     Text(
-                        if (isLast) "Get Started" else "Next",
+                        if (isLast) "Enter Calm Mode" else "Next",
                         style = MaterialTheme.typography.labelLarge,
                     )
                 }

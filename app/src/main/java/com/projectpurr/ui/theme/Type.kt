@@ -21,7 +21,7 @@ val PurrTypography = Typography(
     displayLarge = TextStyle(
         fontFamily    = FontFamily.SansSerif,
         fontWeight    = FontWeight.Light,       // 300 — thin, editorial
-        fontSize      = 52.sp,
+        fontSize      = 50.sp,
         lineHeight    = 58.sp,
         letterSpacing = (-0.5).sp,             // tighter at large sizes
     ),
@@ -36,10 +36,10 @@ val PurrTypography = Typography(
     // ── Headlines ─────────────────────────────────────────────────────────────
     headlineLarge = TextStyle(
         fontFamily    = FontFamily.SansSerif,
-        fontWeight    = FontWeight.SemiBold,    // 600 — strong contrast with display
-        fontSize      = 30.sp,
+        fontWeight    = FontWeight.Medium,
+        fontSize      = 28.sp,
         lineHeight    = 36.sp,
-        letterSpacing = 0.sp,
+        letterSpacing = 0.1.sp,
     ),
     headlineMedium = TextStyle(
         fontFamily    = FontFamily.SansSerif,
@@ -59,10 +59,10 @@ val PurrTypography = Typography(
     // ── Titles — card titles ───────────────────────────────────────────────────
     titleLarge = TextStyle(
         fontFamily    = FontFamily.SansSerif,
-        fontWeight    = FontWeight.SemiBold,
+        fontWeight    = FontWeight.Medium,
         fontSize      = 18.sp,
         lineHeight    = 24.sp,
-        letterSpacing = 0.sp,
+        letterSpacing = 0.1.sp,
     ),
     titleMedium = TextStyle(
         fontFamily    = FontFamily.SansSerif,
