@@ -26,6 +26,14 @@ data class PurrUiState(
     val silentPurr: Boolean = false,
     val chestMode: Boolean = true,
     val sleepTimer: SleepTimerOption = SleepTimerOption.OFF,
+    /** Non-null and counting down only while a sleep timer is armed and playing. */
+    val timerRemainingMs: Long? = null,
+    /** Route audio to built-in speaker, bypassing Bluetooth. */
+    val forceSpeaker: Boolean = false,
+    /** Position within the purr loop (ms) — shared clock for waveform + haptic envelope. */
+    val loopPositionMs: Long = 0L,
+    /** Session output scale (startup ramp, fade, thermal) applied to sensory visualization. */
+    val sensoryIntensity: Float = 1f,
 ) {
     val isSessionActive: Boolean
         get() = phase != SessionPhase.STOPPED

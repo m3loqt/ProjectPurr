@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.projectpurr.data.PurrPreferences
 import com.projectpurr.engine.PurrSessionEngine
 import com.projectpurr.engine.PurrUiState
+import com.projectpurr.engine.SessionPhase
 import com.projectpurr.engine.SleepTimerOption
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -24,22 +25,51 @@ class PurrViewModel(application: Application) : AndroidViewModel(application) {
     val onboardingComplete: StateFlow<Boolean?> = prefs.onboardingComplete
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    val sessionCount: StateFlow<Int> = prefs.sessionCount
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+
     init {
-        // Restore the last-used sleep timer so users don't have to re-set it each session.
         viewModelScope.launch {
-            val saved = prefs.lastSleepTimer.first()
-            if (saved != SleepTimerOption.OFF) engine.setSleepTimer(saved)
+            val savedTimer   = prefs.lastSleepTimer.first()
+            val savedChest   = prefs.chestMode.first()
+            val savedSilent  = prefs.silentPurr.first()
+            val savedSpeaker = prefs.forceSpeaker.first()
+
+            if (savedTimer != SleepTimerOption.OFF) engine.setSleepTimer(savedTimer)
+            engine.setChestMode(savedChest)
+            engine.setSilentPurr(savedSilent)
+            engine.setForceSpeaker(savedSpeaker)
         }
     }
 
-    fun togglePlay()                          = engine.togglePlay()
-    fun setSilentPurr(enabled: Boolean)       = engine.setSilentPurr(enabled)
-    fun setChestMode(enabled: Boolean)        = engine.setChestMode(enabled)
+    fun togglePlay() {
+        if (uiState.value.phase == SessionPhase.STOPPED) {
+            viewModelScope.launch { prefs.incrementSessionCount() }
+        }
+        engine.togglePlay()
+    }
+
+    fun setSilentPurr(enabled: Boolean) {
+        engine.setSilentPurr(enabled)
+        viewModelScope.launch { prefs.setSilentPurr(enabled) }
+    }
+
+    fun setChestMode(enabled: Boolean) {
+        engine.setChestMode(enabled)
+        viewModelScope.launch { prefs.setChestMode(enabled) }
+    }
+
+    fun setForceSpeaker(enabled: Boolean) {
+        engine.setForceSpeaker(enabled)
+        viewModelScope.launch { prefs.setForceSpeaker(enabled) }
+    }
 
     fun setSleepTimer(option: SleepTimerOption) {
         engine.setSleepTimer(option)
         viewModelScope.launch { prefs.setLastSleepTimer(option) }
     }
+
+    fun previewHaptic() = engine.previewHaptic()
 
     fun completeOnboarding() {
         viewModelScope.launch { prefs.setOnboardingComplete() }

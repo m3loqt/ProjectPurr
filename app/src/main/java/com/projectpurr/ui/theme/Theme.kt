@@ -11,10 +11,16 @@ val ColorSurface        = Color(0xFF171210)   // softened card base
 val ColorSurfaceVariant = Color(0xFF211A15)   // elevated surface
 
 // ── Amber accent ──────────────────────────────────────────────────────────────
-val ColorPrimary        = Color(0xFFE09040)   // warm amber (cat-eye / candlelight)
-val ColorPrimaryDim     = Color(0xFFA06428)   // pressed / secondary action
-val ColorPrimaryGlow    = Color(0x22E09040)   // restrained amber glow
+val ColorPrimary        = Color(0xFFC88848)   // dim candlelight amber (not bright orange)
+val ColorPrimaryDim     = Color(0xFF8A5E30)   // pressed / secondary action
+val ColorPrimaryGlow    = Color(0x1AC88848)   // restrained ambient glow
 val ColorOnPrimary      = Color(0xFF0F0B08)   // text on amber button
+
+// ── Sensory orb & moonlight (session centerpiece) ─────────────────────────────
+val ColorOrbAmber       = Color(0xFFB87840)
+val ColorOrbAmberDim    = Color(0xFF6E4828)
+val ColorOrbGlow        = Color(0x38C88848)
+val ColorMoonlitCream   = Color(0xFFE8DCC8)   // soft highlight — never pure white
 
 // ── Text ──────────────────────────────────────────────────────────────────────
 val ColorOnBackground   = Color(0xFFF5EAD8)   // warm cream (primary text)

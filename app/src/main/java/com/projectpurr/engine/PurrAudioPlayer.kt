@@ -2,9 +2,11 @@ package com.projectpurr.engine
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaPlayer
+import android.os.Build
 import android.util.Log
 import com.projectpurr.R
 
@@ -74,6 +76,26 @@ class PurrAudioPlayer(context: Context) {
         setLinearVolume(HouseCatProfile.AUDIO_TARGET_VOLUME)
     }
 
+    /**
+     * Routes playback to the built-in speaker, bypassing Bluetooth or wired headphones.
+     * Useful when the user wants the vibration felt on the chest but headphones are connected.
+     * API 28+: uses preferred device. API 26–27: best-effort via speakerphone flag.
+     */
+    fun setForceSpeaker(enabled: Boolean) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            if (enabled) {
+                val speaker = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+                    .firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+                player?.setPreferredDevice(speaker)
+            } else {
+                player?.setPreferredDevice(null)
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.isSpeakerphoneOn = enabled
+        }
+    }
+
     // ── AudioFocus ─────────────────────────────────────────────────────────────
 
     /**
@@ -115,6 +137,11 @@ class PurrAudioPlayer(context: Context) {
 
     /** Reported loop length (ms). Compare to [HouseCatProfile.PURR_LOOP_PERIOD_MS] when tuning. */
     fun loopDurationMs(): Int = player?.duration?.takeIf { it > 0 } ?: -1
+
+    /** Current position in the active loop (ms). Used to sync UI waveform with audio. */
+    fun currentPositionMs(): Long = player?.currentPosition?.toLong()?.coerceAtLeast(0L) ?: 0L
+
+    fun isPlaying(): Boolean = player?.isPlaying == true
 
     fun release() {
         abandonAudioFocus()

@@ -18,8 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -33,21 +31,15 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.projectpurr.R
-import com.projectpurr.ui.theme.ColorOnBackground
-import com.projectpurr.ui.theme.ColorPrimary
+import com.projectpurr.ui.components.OnboardingPillButton
+import com.projectpurr.ui.components.OnboardingSwipeButton
 import kotlinx.coroutines.launch
 
 private data class OnboardingSlide(
-    val heroLine1: String,
-    val heroLine1Amber: Boolean = false,
-    val heroLine2: String = "",
-    val heroLine2Amber: Boolean = false,
-    val body: String,
+    val title: String,
     val imageContentDescription: String,
 )
 
@@ -59,23 +51,15 @@ private val OnboardingHeroDrawables = listOf(
 
 private val SLIDES = listOf(
     OnboardingSlide(
-        heroLine1 = "Feel it.",
-        heroLine1Amber = true,
-        body = "Not just sound. A soft presence you can rest with.",
+        title = "Feel the purr",
         imageContentDescription = "Cat in moonlight, calm night scene.",
     ),
     OnboardingSlide(
-        heroLine1 = "Settle in.",
-        heroLine2 = "Let it purr.",
-        heroLine2Amber = true,
-        body = "Place your phone on your chest and breathe slowly.",
+        title = "Settle on your chest",
         imageContentDescription = "Cat resting in warm dim light.",
     ),
     OnboardingSlide(
-        heroLine1 = "Quiet comfort",
-        heroLine2 = "anytime.",
-        heroLine2Amber = true,
-        body = "A warm ritual for moments that feel heavy or lonely.",
+        title = "Rest when you need",
         imageContentDescription = "Sleeping cat curled up in cozy darkness.",
     ),
 )
@@ -87,7 +71,7 @@ fun OnboardingScreen(onGetStarted: () -> Unit) {
 
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = Color(0xFF070605),
+        color = Color.Black,
     ) {
         Box(Modifier.fillMaxSize()) {
             HorizontalPager(
@@ -108,10 +92,10 @@ fun OnboardingScreen(onGetStarted: () -> Unit) {
                             .background(
                                 Brush.verticalGradient(
                                     colorStops = arrayOf(
-                                        0f to Color.Black.copy(alpha = 0.52f),
-                                        0.22f to Color.Black.copy(alpha = 0.06f),
-                                        0.58f to Color.Black.copy(alpha = 0.10f),
-                                        1f to Color(0xFF070605).copy(alpha = 0.90f),
+                                        0f to Color.Black.copy(alpha = 0.50f),
+                                        0.30f to Color.Black.copy(alpha = 0.08f),
+                                        0.62f to Color.Black.copy(alpha = 0.18f),
+                                        1f to Color.Black.copy(alpha = 0.88f),
                                     ),
                                 ),
                             ),
@@ -120,30 +104,20 @@ fun OnboardingScreen(onGetStarted: () -> Unit) {
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(horizontal = 32.dp)
-                            .padding(bottom = 196.dp),
+                            .padding(bottom = 200.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Spacer(Modifier.weight(1f))
-                        val hero = buildAnnotatedString {
-                            val c1 = if (slide.heroLine1Amber) ColorPrimary else ColorOnBackground
-                            withStyle(SpanStyle(color = c1)) { append(slide.heroLine1) }
-                            if (slide.heroLine2.isNotEmpty()) {
-                                append("\n")
-                                val c2 = if (slide.heroLine2Amber) ColorPrimary else ColorOnBackground
-                                withStyle(SpanStyle(color = c2)) { append(slide.heroLine2) }
-                            }
-                        }
-                        Text(text = hero, style = MaterialTheme.typography.displayLarge)
-                        Spacer(Modifier.height(22.dp))
                         Text(
-                            text = slide.body,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = ColorOnBackground.copy(alpha = 0.82f),
+                            text = slide.title,
+                            style = MaterialTheme.typography.displayLarge,
+                            color = Color.White,
+                            textAlign = TextAlign.Center,
                         )
                     }
                 }
             }
 
-            // Skip — above imagery; top vignette keeps legibility
             if (pagerState.currentPage < SLIDES.lastIndex) {
                 Box(
                     modifier = Modifier
@@ -155,7 +129,7 @@ fun OnboardingScreen(onGetStarted: () -> Unit) {
                         Text(
                             "Skip",
                             style = MaterialTheme.typography.labelLarge,
-                            color = ColorOnBackground.copy(alpha = 0.82f),
+                            color = Color.White.copy(alpha = 0.72f),
                         )
                     }
                 }
@@ -165,8 +139,8 @@ fun OnboardingScreen(onGetStarted: () -> Unit) {
                 modifier = Modifier
                     .fillMaxSize()
                     .navigationBarsPadding()
-                    .padding(horizontal = 32.dp)
-                    .padding(bottom = 36.dp),
+                    .padding(horizontal = 28.dp)
+                    .padding(bottom = 32.dp),
                 verticalArrangement = Arrangement.Bottom,
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -182,37 +156,29 @@ fun OnboardingScreen(onGetStarted: () -> Unit) {
                                 .height(8.dp)
                                 .width(w)
                                 .background(
-                                    color = if (active) ColorPrimary
-                                    else ColorOnBackground.copy(alpha = 0.28f),
+                                    color = if (active) Color.White
+                                    else Color.White.copy(alpha = 0.28f),
                                     shape = CircleShape,
                                 ),
                         )
                     }
                 }
-                Spacer(Modifier.height(26.dp))
+                Spacer(Modifier.height(24.dp))
+
                 val isLast = pagerState.currentPage == SLIDES.lastIndex
-                Button(
-                    onClick = {
-                        if (isLast) {
-                            onGetStarted()
-                        } else {
+                if (isLast) {
+                    OnboardingSwipeButton(
+                        label = "Begin your journey",
+                        onComplete = onGetStarted,
+                    )
+                } else {
+                    OnboardingPillButton(
+                        label = "Next",
+                        onClick = {
                             scope.launch {
                                 pagerState.animateScrollToPage(pagerState.currentPage + 1)
                             }
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = ColorPrimary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                    ),
-                    shape = MaterialTheme.shapes.large,
-                ) {
-                    Text(
-                        if (isLast) "Enter Calm Mode" else "Next",
-                        style = MaterialTheme.typography.labelLarge,
+                        },
                     )
                 }
             }

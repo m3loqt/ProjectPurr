@@ -1,59 +1,38 @@
 package com.projectpurr.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.projectpurr.R
 import com.projectpurr.engine.PurrUiState
 import com.projectpurr.engine.SessionPhase
 import com.projectpurr.engine.SleepTimerOption
-import com.projectpurr.ui.components.AmbientBackdrop
-import com.projectpurr.ui.components.GlassCard
-import com.projectpurr.ui.theme.ColorOnBackground
-import com.projectpurr.ui.theme.ColorOnPrimary
-import com.projectpurr.ui.theme.ColorOnSurface
-import com.projectpurr.ui.theme.ColorPrimary
-import com.projectpurr.ui.theme.ColorPrimaryGlow
-import com.projectpurr.ui.theme.ColorTextSecondary
+import com.projectpurr.ui.components.AtmosphericScene
+import com.projectpurr.ui.components.CinematicTextureOverlay
+import com.projectpurr.ui.components.SessionInteractionPanel
+import com.projectpurr.ui.theme.ColorMoonlitCream
 
 @Composable
 fun SessionScreen(
@@ -62,176 +41,127 @@ fun SessionScreen(
     onTogglePlay: () -> Unit,
     onSilentChange: (Boolean) -> Unit,
     onChestModeChange: (Boolean) -> Unit,
+    onForceSpeakerChange: (Boolean) -> Unit,
     onSleepTimerChange: (SleepTimerOption) -> Unit,
 ) {
     val playing = state.phase == SessionPhase.PLAYING || state.phase == SessionPhase.FADING
+    var showBackConfirm by remember { mutableStateOf(false) }
 
-    // Dim deeper and slower so the session UI feels like it falls into the background.
     val chestDim by animateFloatAsState(
-        targetValue = if (state.chestMode && playing) 0.34f else 1f,
-        animationSpec = tween(durationMillis = 950),
-        label = "sessionDim",
+        targetValue = when {
+            state.chestMode && playing -> 0.18f
+            playing -> 0.48f
+            else -> 1f
+        },
+        animationSpec = tween(durationMillis = 1200),
+        label = "sessionUiDim",
     )
-    val glowTransition = rememberInfiniteTransition(label = "sessionGlow")
-    val glowScale by glowTransition.animateFloat(
-        initialValue = 0.94f,
-        targetValue = if (playing) 1.06f else 0.98f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = if (playing) 3600 else 4600),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "glowScale",
+    val panelAlpha by animateFloatAsState(
+        targetValue = when {
+            state.chestMode && playing -> 0.38f
+            playing -> 0.68f
+            else -> 1f
+        },
+        animationSpec = tween(durationMillis = 1000),
+        label = "panelFade",
     )
-    val glowAlpha by glowTransition.animateFloat(
-        initialValue = 0.12f,
-        targetValue = if (playing) 0.32f else 0.16f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = if (playing) 4200 else 5200),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "glowAlpha",
+    val textAlpha by animateFloatAsState(
+        targetValue = if (playing) 0.52f else 0.94f,
+        animationSpec = tween(durationMillis = 900),
+        label = "textFade",
     )
 
-    // Intercept system back so we stop the session before popping the back stack.
-    BackHandler(onBack = onBack)
+    val timerLabel = state.timerRemainingMs
+        ?.takeIf { it > 0 }
+        ?.let { ms -> ms.toTimerLabel() }
 
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        AmbientBackdrop {
-            Column(
+    BackHandler {
+        if (state.isSessionActive) showBackConfirm = true else onBack()
+    }
+
+    if (showBackConfirm) {
+        AlertDialog(
+            onDismissRequest = { showBackConfirm = false },
+            title = { Text("Leave the purr?") },
+            text = { Text("The warmth will fade away.") },
+            confirmButton = {
+                TextButton(onClick = { showBackConfirm = false; onBack() }) {
+                    Text("End session")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBackConfirm = false }) { Text("Stay") }
+            },
+        )
+    }
+
+    AtmosphericScene(
+        heroImageRes = R.drawable.onboarding_hero_3,
+        heroAlpha = if (playing) 0.88f else 1f,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .alpha(chestDim),
+        ) {
+            CinematicTextureOverlay(modifier = Modifier.fillMaxSize())
+
+            // Back — floats on atmosphere, outside the glass slab
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .systemBarsPadding()
-                    .alpha(chestDim),
-                horizontalAlignment = Alignment.CenterHorizontally,
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 4.dp, vertical = 4.dp)
+                    .alpha(panelAlpha),
             ) {
-            // Top bar
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = ColorTextSecondary,
-                        )
-                    }
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = "House Cat",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = ColorOnBackground.copy(alpha = 0.92f),
-                    )
-                }
-
-                Spacer(Modifier.height(8.dp))
-
-                // Session phase label
-                Text(
-                    text = when (state.phase) {
-                        SessionPhase.STOPPED -> "Settle the phone on your chest, then press play."
-                        SessionPhase.PLAYING -> "Resting with you."
-                        SessionPhase.FADING  -> "Softly drifting to silence..."
+                IconButton(
+                    onClick = {
+                        if (state.isSessionActive) showBackConfirm = true else onBack()
                     },
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = ColorTextSecondary,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 32.dp),
-                )
-
-                // Play button with slow breathing glow
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.align(Alignment.CenterStart),
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(154.dp * glowScale)
-                            .drawBehind {
-                                drawCircle(
-                                    color = ColorPrimaryGlow.copy(alpha = glowAlpha),
-                                    radius = size.minDimension * 0.72f,
-                                )
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        FloatingActionButton(
-                            onClick = onTogglePlay,
-                            modifier = Modifier.size(112.dp),
-                            shape = CircleShape,
-                            containerColor = ColorPrimary,
-                            contentColor = ColorOnPrimary,
-                            elevation = FloatingActionButtonDefaults.elevation(0.dp),
-                        ) {
-                            Icon(
-                                imageVector = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                                contentDescription = if (playing) "Pause" else "Play",
-                                modifier = Modifier.size(52.dp),
-                            )
-                        }
-                    }
-                }
-
-                // Glass controls card
-                GlassCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp)
-                        .padding(bottom = 32.dp),
-                    innerPadding = 20.dp,
-                ) {
-                    ControlToggleRow(
-                        label = "Silent purr",
-                        checked = state.silentPurr,
-                        onCheckedChange = onSilentChange,
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = ColorMoonlitCream.copy(alpha = 0.34f),
                     )
-                    Spacer(Modifier.height(16.dp))
-                    ControlToggleRow(
-                        label = "Chest mode",
-                        checked = state.chestMode,
-                        onCheckedChange = onChestModeChange,
-                    )
-                    Spacer(Modifier.height(20.dp))
-                    Text(
-                        "Sleep timer",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = ColorOnSurface.copy(alpha = 0.92f),
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        SleepTimerOption.entries.forEach { opt ->
-                            FilterChip(
-                                selected = state.sleepTimer == opt,
-                                onClick = { onSleepTimerChange(opt) },
-                                label = {
-                                    Text(opt.label, style = MaterialTheme.typography.labelMedium)
-                                },
-                            )
-                        }
-                    }
                 }
             }
+
+            // Glass panel — typography + controls on one slab
+            SessionInteractionPanel(
+                playing = playing,
+                loopPositionMs = state.loopPositionMs,
+                sensoryIntensity = state.sensoryIntensity,
+                profileLabel = "House Cat",
+                whisperPhrase = sessionWhisper(state.phase),
+                timerLabel = timerLabel,
+                textAlpha = textAlpha,
+                silentPurr = state.silentPurr,
+                forceSpeaker = state.forceSpeaker,
+                chestMode = state.chestMode,
+                sleepTimer = state.sleepTimer,
+                panelAlpha = panelAlpha,
+                onTogglePlay = onTogglePlay,
+                onSleepTimerChange = onSleepTimerChange,
+                onToggleSilent = { onSilentChange(!state.silentPurr) },
+                onToggleSpeaker = { onForceSpeakerChange(!state.forceSpeaker) },
+                onToggleChestMode = { onChestModeChange(!state.chestMode) },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding(),
+            )
         }
     }
 }
 
-@Composable
-private fun ControlToggleRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label, style = MaterialTheme.typography.labelLarge, color = ColorOnSurface)
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
+private fun sessionWhisper(phase: SessionPhase): String = when (phase) {
+    SessionPhase.STOPPED -> "Begin when ready"
+    SessionPhase.PLAYING -> "Rest with me"
+    SessionPhase.FADING  -> "Drifting away"
+}
+
+private fun Long.toTimerLabel(): String {
+    val totalSec = (this / 1000).coerceAtLeast(0)
+    return "%d:%02d".format(totalSec / 60, totalSec % 60)
 }
