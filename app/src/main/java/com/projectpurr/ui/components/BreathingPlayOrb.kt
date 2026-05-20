@@ -11,8 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Pets
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -21,7 +20,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
@@ -31,7 +29,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.projectpurr.ui.theme.ColorMoonlitCream
 import com.projectpurr.ui.theme.ColorOrbAmber
-import com.projectpurr.ui.theme.ColorOrbAmberDim
 
 /**
  * Matte tactile play orb — softly alive, not a light source.
@@ -90,22 +87,16 @@ fun BreathingPlayOrb(
                         color = ColorOrbAmber.copy(alpha = warmthAlpha * 0.6f * breathScale),
                         radius = this.size.minDimension * 0.46f,
                     )
+                    // Solid amber fill — matches Begin Session button
                     drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                Color(0xFF9A7048).copy(alpha = 0.90f),
-                                ColorOrbAmber.copy(alpha = 0.76f),
-                                ColorOrbAmberDim.copy(alpha = 0.94f),
-                                Color(0xFF2E2218),
-                            ),
-                            center = center.copy(y = center.y * 0.92f),
-                        ),
+                        color  = Color(0xFFBB7C34),
                         radius = this.size.minDimension * 0.5f,
                     )
+                    // Subtle dark edge ring for definition
                     drawCircle(
-                        color = Color(0xFF1A1410).copy(alpha = 0.32f),
+                        color  = Color(0xFF6B3E18).copy(alpha = 0.55f),
                         radius = this.size.minDimension * 0.48f,
-                        style = Stroke(width = 1f),
+                        style  = Stroke(width = 1.5f),
                     )
                 }
                 .clickable(
@@ -117,10 +108,10 @@ fun BreathingPlayOrb(
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                imageVector        = Icons.Filled.Pets,
                 contentDescription = if (playing) "Pause" else "Play",
-                tint = ColorMoonlitCream.copy(alpha = 0.76f),
-                modifier = Modifier.size(size * 0.34f),
+                tint               = Color(0xFF1A0E05),
+                modifier           = Modifier.size(size * 0.38f),
             )
         }
     }

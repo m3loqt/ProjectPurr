@@ -1,5 +1,6 @@
 package com.projectpurr.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -14,8 +15,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Alarm
 import androidx.compose.material.icons.outlined.Bedtime
+import androidx.compose.material.icons.outlined.HourglassEmpty
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.automirrored.outlined.VolumeOff
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
@@ -23,19 +24,25 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.projectpurr.engine.SleepTimerOption
 import com.projectpurr.ui.theme.ColorMoonlitCream
 import com.projectpurr.ui.theme.ColorOrbAmber
+import com.projectpurr.ui.theme.ColorPrimary
 import com.projectpurr.ui.theme.ColorTextTertiary
 
 @Composable
@@ -45,7 +52,6 @@ fun SessionInteractionPanel(
     sensoryIntensity: Float,
     profileLabel: String,
     whisperPhrase: String,
-    timerLabel: String?,
     textAlpha: Float,
     silentPurr: Boolean,
     forceSpeaker: Boolean,
@@ -61,10 +67,26 @@ fun SessionInteractionPanel(
 ) {
     val playSize = if (playing) 68.dp else 72.dp
     var showSleepTimerModal by remember { mutableStateOf(false) }
-    var showAlarmModal by remember { mutableStateOf(false) }
+
+    // Live session elapsed time — starts fresh each time playing becomes true
+    var elapsedMs by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(playing) {
+        if (playing) {
+            val startMs = System.currentTimeMillis()
+            while (isActive) {
+                delay(1000)
+                elapsedMs = System.currentTimeMillis() - startMs
+            }
+        } else {
+            elapsedMs = 0L
+        }
+    }
+    val elapsedLabel = if (playing) {
+        val s = elapsedMs / 1000
+        "%d:%02d".format(s / 60, s % 60)
+    } else ""
 
     Column(modifier = modifier) {
-        // Typography sits above the glass slab — atmospheric, not encased
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -74,30 +96,19 @@ fun SessionInteractionPanel(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                text = profileLabel,
-                style = MaterialTheme.typography.labelSmall,
-                color = ColorMoonlitCream.copy(alpha = 0.80f),
+                text          = profileLabel,
+                style         = MaterialTheme.typography.labelSmall,
+                color         = ColorMoonlitCream.copy(alpha = 0.58f),
                 letterSpacing = MaterialTheme.typography.labelSmall.letterSpacing * 1.5f,
             )
-
             Spacer(Modifier.height(6.dp))
-
             Text(
-                text = whisperPhrase,
-                style = MaterialTheme.typography.headlineLarge,
-                color = ColorMoonlitCream.copy(alpha = 0.88f),
-                textAlign = TextAlign.Center,
+                text       = whisperPhrase,
+                style      = MaterialTheme.typography.headlineLarge,
+                color      = ColorMoonlitCream.copy(alpha = 0.80f),
+                textAlign  = TextAlign.Center,
                 lineHeight = MaterialTheme.typography.headlineLarge.lineHeight * 1.02f,
             )
-
-            if (timerLabel != null) {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = timerLabel,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = ColorOrbAmber.copy(alpha = 0.44f),
-                )
-            }
         }
 
         SmokedInteractionSurface(modifier = Modifier.alpha(panelAlpha)) {
@@ -107,13 +118,14 @@ fun SessionInteractionPanel(
                     .height(SessionPanelMetrics.ritualRowHeight),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // Left: live session duration counter
                 RitualControl(
-                    label = "Set alarm",
-                    sublabel = sleepTimerSublabel(sleepTimer),
-                    icon = Icons.Outlined.Alarm,
-                    active = sleepTimer != SleepTimerOption.OFF,
+                    label    = "Duration",
+                    sublabel = elapsedLabel,
+                    icon     = Icons.Outlined.HourglassEmpty,
+                    active   = playing,
                     modifier = Modifier.width(SessionPanelMetrics.ritualSlotWidth),
-                    onClick = { showAlarmModal = true },
+                    onClick  = {},
                 )
 
                 Box(
@@ -143,9 +155,7 @@ fun SessionInteractionPanel(
             Spacer(Modifier.height(SessionPanelMetrics.rowToWaveform))
 
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(SessionPanelMetrics.waveformHeight),
+                modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center,
             ) {
                 PurrWaveform(
@@ -159,29 +169,36 @@ fun SessionInteractionPanel(
             Spacer(Modifier.height(SessionPanelMetrics.waveformToIcons))
 
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(SessionPanelMetrics.iconRowHeight),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                modifier          = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 SoftIconToggle(
-                    icon = Icons.AutoMirrored.Outlined.VolumeUp,
-                    active = forceSpeaker,
+                    icon               = Icons.AutoMirrored.Outlined.VolumeUp,
+                    label              = "Speaker",
+                    active             = forceSpeaker,
                     contentDescription = "Phone speaker",
-                    onClick = onToggleSpeaker,
+                    onClick            = onToggleSpeaker,
+                    modifier           = Modifier.width(SessionPanelMetrics.ritualSlotWidth),
                 )
+                Box(
+                    modifier         = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    SoftIconToggle(
+                        icon               = Icons.Outlined.Bedtime,
+                        label              = "Chest mode",
+                        active             = chestMode,
+                        contentDescription = "Chest mode",
+                        onClick            = onToggleChestMode,
+                    )
+                }
                 SoftIconToggle(
-                    icon = Icons.Outlined.Bedtime,
-                    active = chestMode,
-                    contentDescription = "Chest mode",
-                    onClick = onToggleChestMode,
-                )
-                SoftIconToggle(
-                    icon = Icons.AutoMirrored.Outlined.VolumeOff,
-                    active = silentPurr,
+                    icon               = Icons.AutoMirrored.Outlined.VolumeOff,
+                    label              = "Silent",
+                    active             = silentPurr,
                     contentDescription = "Silent purr",
-                    onClick = onToggleSilent,
+                    onClick            = onToggleSilent,
+                    modifier           = Modifier.width(SessionPanelMetrics.ritualSlotWidth),
                 )
             }
         }
@@ -189,13 +206,10 @@ fun SessionInteractionPanel(
 
     if (showSleepTimerModal) {
         SleepTimerModal(
-            current = sleepTimer,
+            current   = sleepTimer,
             onDismiss = { showSleepTimerModal = false },
             onConfirm = { option -> onSleepTimerChange(option); showSleepTimerModal = false },
         )
-    }
-    if (showAlarmModal) {
-        AlarmModal(onDismiss = { showAlarmModal = false })
     }
 }
 
@@ -220,21 +234,21 @@ private fun RitualControl(
         Icon(
             imageVector = icon,
             contentDescription = label,
-            tint = ColorMoonlitCream.copy(alpha = if (active) 0.54f else 0.34f),
+            tint = if (active) ColorPrimary else ColorMoonlitCream.copy(alpha = 0.26f),
             modifier = Modifier.size(22.dp),
         )
         Spacer(Modifier.height(6.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = ColorMoonlitCream.copy(alpha = 0.46f),
+            color = ColorMoonlitCream.copy(alpha = 0.36f),
             textAlign = TextAlign.Center,
         )
         if (sublabel.isNotEmpty()) {
             Text(
                 text = sublabel,
                 style = MaterialTheme.typography.labelSmall,
-                color = ColorOrbAmber.copy(alpha = 0.36f),
+                color = ColorOrbAmber.copy(alpha = 0.60f),
                 textAlign = TextAlign.Center,
             )
         }
@@ -244,27 +258,41 @@ private fun RitualControl(
 @Composable
 private fun SoftIconToggle(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
     active: Boolean,
     contentDescription: String,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Box(
-        modifier = Modifier
-            .width(52.dp)
-            .height(SessionPanelMetrics.iconRowHeight)
-            .clip(CircleShape)
+    val tint = if (active) ColorPrimary else ColorMoonlitCream.copy(alpha = 0.55f)
+    Column(
+        modifier = modifier
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
+                indication        = null,
+                onClick           = onClick,
             ),
-        contentAlignment = Alignment.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = ColorMoonlitCream.copy(alpha = if (active) 0.58f else 0.26f),
-            modifier = Modifier.size(22.dp),
+        Box(
+            modifier         = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(Color(0xFF252118)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector        = icon,
+                contentDescription = contentDescription,
+                tint               = tint,
+                modifier           = Modifier.size(20.dp),
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text  = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = ColorMoonlitCream.copy(alpha = 0.36f),
         )
     }
 }

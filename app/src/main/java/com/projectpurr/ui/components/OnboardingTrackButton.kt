@@ -6,11 +6,13 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -36,11 +38,11 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
-private val TrackColor = Color(0xFF1A1A1A)
-private val HandleColor = Color(0xFF4A4A4A)
-private val LabelColor = Color.White
+private val TrackColor  = Color(0xFF1A1107)   // deep amber-dark surface
+private val HandleColor = Color(0xFFBB7C34)   // amber (matches "Begin Session" button)
+private val LabelColor  = Color(0xFFE8DCC8)   // moonlit cream
 
-/** Tap-to-advance pill — same visual language as swipe track. */
+/** Plain amber pill — used on onboarding pages 1 and 2. */
 @Composable
 fun OnboardingPillButton(
     label: String,
@@ -52,36 +54,28 @@ fun OnboardingPillButton(
             .fillMaxWidth()
             .height(56.dp)
             .clip(RoundedCornerShape(50))
-            .background(TrackColor)
+            .background(HandleColor)
             .pointerInput(Unit) {
                 detectTapGestures { onClick() }
             },
+        contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .padding(4.dp)
-                .size(48.dp)
-                .clip(CircleShape)
-                .background(HandleColor),
-            contentAlignment = Alignment.Center,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
         ) {
+            Text(
+                text  = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = Color(0xFF1A0E05),
+            )
+            Spacer(Modifier.width(8.dp))
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                imageVector        = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
-                tint = LabelColor,
-                modifier = Modifier.size(22.dp),
+                tint               = Color(0xFF1A0E05),
+                modifier           = Modifier.size(18.dp),
             )
         }
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge,
-            color = LabelColor.copy(alpha = 0.88f),
-            modifier = Modifier
-                .align(Alignment.Center)
-                .padding(start = 56.dp, end = 16.dp),
-            textAlign = TextAlign.Center,
-        )
     }
 }
 

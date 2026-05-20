@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.projectpurr.engine.SleepTimerOption
@@ -24,7 +25,8 @@ class PurrPreferences(context: Context) {
         val KEY_CHEST_MODE          = booleanPreferencesKey("chest_mode")
         val KEY_SILENT_PURR         = booleanPreferencesKey("silent_purr")
         val KEY_FORCE_SPEAKER       = booleanPreferencesKey("force_speaker")
-        val KEY_SESSION_COUNT       = intPreferencesKey("session_count")
+        val KEY_SESSION_COUNT         = intPreferencesKey("session_count")
+        val KEY_LAST_SESSION_EPOCH    = longPreferencesKey("last_session_epoch")
     }
 
     val onboardingComplete: Flow<Boolean> = store.data.map { prefs ->
@@ -52,6 +54,10 @@ class PurrPreferences(context: Context) {
         prefs[KEY_SESSION_COUNT] ?: 0
     }
 
+    val lastSessionEpoch: Flow<Long> = store.data.map { prefs ->
+        prefs[KEY_LAST_SESSION_EPOCH] ?: 0L
+    }
+
     suspend fun setOnboardingComplete() {
         store.edit { prefs -> prefs[KEY_ONBOARDING_COMPLETE] = true }
     }
@@ -76,5 +82,19 @@ class PurrPreferences(context: Context) {
         store.edit { prefs ->
             prefs[KEY_SESSION_COUNT] = (prefs[KEY_SESSION_COUNT] ?: 0) + 1
         }
+    }
+
+    suspend fun recordLastSession(epochMs: Long = System.currentTimeMillis()) {
+        store.edit { prefs ->
+            prefs[KEY_LAST_SESSION_EPOCH] = epochMs
+        }
+    }
+
+    suspend fun resetSessionCount() {
+        store.edit { prefs -> prefs[KEY_SESSION_COUNT] = 0 }
+    }
+
+    suspend fun resetLastSession() {
+        store.edit { prefs -> prefs.remove(KEY_LAST_SESSION_EPOCH) }
     }
 }

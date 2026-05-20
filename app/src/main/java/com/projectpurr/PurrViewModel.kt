@@ -4,20 +4,57 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.projectpurr.data.PurrPreferences
+import com.projectpurr.data.RestHistoryRepository
+import com.projectpurr.data.db.RestSessionEntity
 import com.projectpurr.engine.PurrSessionEngine
 import com.projectpurr.engine.PurrUiState
 import com.projectpurr.engine.SessionPhase
 import com.projectpurr.engine.SleepTimerOption
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class PurrViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val engine = PurrSessionEngine(application, viewModelScope)
-    private val prefs  = PurrPreferences(application)
+    private val prefs   = PurrPreferences(application)
+    private val history = RestHistoryRepository(application)
+
+    private var sessionCountAtStart = 0
+
+    private val _pendingBondDelta = MutableStateFlow(0)
+    val pendingBondDelta: StateFlow<Int> = _pendingBondDelta.asStateFlow()
+
+    private val engine = PurrSessionEngine(
+        application  = application,
+        scope        = viewModelScope,
+        onSessionCompleted = { startMs, endMs, durMs, silent, chest, timerMins, natural ->
+            viewModelScope.launch {
+                history.save(
+                    RestSessionEntity(
+                        startedAtMillis    = startMs,
+                        endedAtMillis      = endMs,
+                        durationMillis     = durMs,
+                        companionId        = "house_cat",
+                        companionName      = "House Cat",
+                        usedSilentMode     = silent,
+                        usedChestMode      = chest,
+                        timerOptionMinutes = timerMins,
+                        completedNaturally = natural,
+                    )
+                )
+                // Increment count and record epoch only for real saved sessions (engine enforces >=60s)
+                prefs.incrementSessionCount()
+                prefs.recordLastSession(endMs)
+                val newCount = sessionCountAtStart + 1
+                val delta = (newCount * 14).coerceAtMost(100) - (sessionCountAtStart * 14).coerceAtMost(100)
+                if (delta > 0) _pendingBondDelta.value = delta
+            }
+        },
+    )
 
     val uiState: StateFlow<PurrUiState> = engine.state
 
@@ -27,6 +64,12 @@ class PurrViewModel(application: Application) : AndroidViewModel(application) {
 
     val sessionCount: StateFlow<Int> = prefs.sessionCount
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+
+    val lastSessionEpoch: StateFlow<Long> = prefs.lastSessionEpoch
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0L)
+
+    val recentSessions: StateFlow<List<RestSessionEntity>> = history.recentSessions
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     init {
         viewModelScope.launch {
@@ -42,9 +85,11 @@ class PurrViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun consumeBondDelta() { _pendingBondDelta.value = 0 }
+
     fun togglePlay() {
         if (uiState.value.phase == SessionPhase.STOPPED) {
-            viewModelScope.launch { prefs.incrementSessionCount() }
+            sessionCountAtStart = sessionCount.value
         }
         engine.togglePlay()
     }
@@ -70,6 +115,14 @@ class PurrViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun previewHaptic() = engine.previewHaptic()
+
+    fun clearHistory() {
+        viewModelScope.launch {
+            history.deleteAll()
+            prefs.resetSessionCount()
+            prefs.resetLastSession()
+        }
+    }
 
     fun completeOnboarding() {
         viewModelScope.launch { prefs.setOnboardingComplete() }

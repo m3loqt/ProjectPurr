@@ -19,6 +19,13 @@ enum class SleepTimerOption(val label: String) {
         M20 -> 20L * 60L * 1000L
         M30 -> 30L * 60L * 1000L
     }
+
+    fun durationMinutes(): Int? = when (this) {
+        OFF -> null
+        M10 -> 10
+        M20 -> 20
+        M30 -> 30
+    }
 }
 
 data class PurrUiState(

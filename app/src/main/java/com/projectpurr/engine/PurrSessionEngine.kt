@@ -28,6 +28,15 @@ import kotlinx.coroutines.launch
 class PurrSessionEngine(
     application: Application,
     private val scope: CoroutineScope,
+    private val onSessionCompleted: ((
+        startedAtMs: Long,
+        endedAtMs: Long,
+        durationMs: Long,
+        usedSilent: Boolean,
+        usedChest: Boolean,
+        timerOptionMinutes: Int?,
+        completedNaturally: Boolean,
+    ) -> Unit)? = null,
 ) {
     private val wakeLock: PowerManager.WakeLock =
         (application.getSystemService(Context.POWER_SERVICE) as PowerManager)
@@ -63,6 +72,9 @@ class PurrSessionEngine(
 
     private var playStartElapsed: Long = 0L
     private var sessionAnchorElapsed: Long = 0L
+
+    private var sessionStartWallMs: Long = 0L
+    private var sessionSaved: Boolean = false
 
     private var focusInterrupted = false
 
@@ -138,6 +150,8 @@ class PurrSessionEngine(
         updateMediaSession()
         log("Session started — silentPurr=${_state.value.silentPurr} sleepTimer=${_state.value.sleepTimer}")
         acquireWakeLock()
+        sessionStartWallMs = System.currentTimeMillis()
+        sessionSaved = false
 
         sessionAnchorElapsed = SystemClock.elapsedRealtime()
 
@@ -303,6 +317,7 @@ class PurrSessionEngine(
             audio.resetVolumeToTarget()
             haptics.stop()
             applySensoryIntensity(1f)
+            notifySessionCompleted(completedNaturally = false)
             _state.update {
                 it.copy(phase = SessionPhase.STOPPED, loopPositionMs = 0L, sensoryIntensity = 1f)
             }
@@ -420,10 +435,29 @@ class PurrSessionEngine(
         timerRemainingMs     = null
         timerDeadlineElapsed = Long.MAX_VALUE
         waveformSyncJob?.cancel(); waveformSyncJob = null
+        notifySessionCompleted(completedNaturally = true)
         _state.update {
             it.copy(phase = SessionPhase.STOPPED, timerRemainingMs = null, loopPositionMs = 0L, sensoryIntensity = 1f)
         }
         updateMediaSession()
+    }
+
+    private fun notifySessionCompleted(completedNaturally: Boolean) {
+        if (sessionSaved) return
+        val endMs = System.currentTimeMillis()
+        val durationMs = endMs - sessionStartWallMs
+        if (durationMs < MIN_SAVE_DURATION_MS) return
+        sessionSaved = true
+        val s = _state.value
+        onSessionCompleted?.invoke(
+            sessionStartWallMs,
+            endMs,
+            durationMs,
+            s.silentPurr,
+            s.chestMode,
+            s.sleepTimer.durationMinutes(),
+            completedNaturally,
+        )
     }
 
     private fun applySensoryIntensity(scale: Float) {
@@ -497,6 +531,7 @@ class PurrSessionEngine(
         private const val TAG = "PurrEngine"
         private const val WAKELOCK_TIMEOUT_MS = 35L * 60L * 1000L
 
+        private const val MIN_SAVE_DURATION_MS = 60_000L
         private const val STARTUP_FADE_IN_MS = 600L
         private const val WAVEFORM_TICK_MS   = 33L
 

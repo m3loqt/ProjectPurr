@@ -8,6 +8,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,11 +34,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.NightsStay
+import androidx.compose.material.icons.filled.Pets
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -64,6 +68,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.projectpurr.R
+import com.projectpurr.data.db.RestSessionEntity
 import com.projectpurr.ui.components.AtmosphericScene
 import com.projectpurr.ui.components.CinematicTextureOverlay
 import com.projectpurr.ui.theme.ColorMoonlitCream
@@ -76,35 +81,77 @@ import java.util.Calendar
 
 // ── Shared tokens ─────────────────────────────────────────────────────────────
 
-private val CardBg      = Color(0xFF191612)   // dark warm surface matching inspo
-private val CardShape   = RoundedCornerShape(18.dp)
-private val DAY_LABELS  = listOf("M", "T", "W", "T", "F", "S", "S")
-private val BAR_HEIGHTS = listOf(0.32f, 0.52f, 0.40f, 0.66f, 0.48f, 0.86f, 1.00f)
+private val CardBg    = Color(0xFF191612)
+private val CardShape = RoundedCornerShape(18.dp)
+private val DAY_LABELS = listOf("M", "T", "W", "T", "F", "S", "S")
+
+// ── Stats derived from real session data ──────────────────────────────────────
+
+private data class HomeStats(
+    val thisWeekCount: Int,
+    val totalDurationMin: Int,
+    val sessionCount: Int,
+    /** Sessions per weekday Mon=0..Sun=6 for this week, relative heights 0..1f */
+    val weekBarFractions: List<Float>,
+    /** Cumulative session count per weekday for line graph, normalised 0..1f */
+    val weekLineFractions: List<Float>,
+)
+
+private fun computeHomeStats(sessions: List<RestSessionEntity>): HomeStats {
+    val now     = Calendar.getInstance()
+    // Start of this week (Monday)
+    val weekStart = Calendar.getInstance().apply {
+        set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        // if today is Sunday, roll back a week so Monday is correct
+        if (now.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY) add(Calendar.WEEK_OF_YEAR, -1)
+    }
+    val weekStartMs = weekStart.timeInMillis
+
+    val thisWeek = sessions.filter { it.startedAtMillis >= weekStartMs }
+    val counts   = IntArray(7) // Mon=0..Sun=6
+    thisWeek.forEach { s ->
+        val cal = Calendar.getInstance().apply { timeInMillis = s.startedAtMillis }
+        val dow = (cal.get(Calendar.DAY_OF_WEEK) + 5) % 7 // Sun=1→6, Mon=2→0
+        counts[dow]++
+    }
+
+    val maxCount = counts.max().coerceAtLeast(1)
+    val fracs    = counts.map { it.toFloat() / maxCount }
+
+    // Cumulative across the week for the line graph
+    var running = 0
+    val lineFracs = counts.map { c -> running += c; running }.let { cum ->
+        val peak = cum.last().coerceAtLeast(1)
+        cum.map { it.toFloat() / peak }
+    }
+
+    val totalMin = sessions.sumOf { it.durationMillis / 60_000L }.toInt()
+
+    return HomeStats(
+        thisWeekCount     = thisWeek.size,
+        totalDurationMin  = totalMin,
+        sessionCount      = sessions.size,
+        weekBarFractions  = fracs,
+        weekLineFractions = lineFracs,
+    )
+}
 
 // ── Root ──────────────────────────────────────────────────────────────────────
 
 @Composable
 fun HomeScreen(
     sessionCount: Int,
+    recentSessions: List<RestSessionEntity> = emptyList(),
+    pendingBondDelta: Int = 0,
+    onBondDeltaConsumed: () -> Unit = {},
     onSelectHouseCat: () -> Unit,
     @Suppress("UNUSED_PARAMETER") onPreviewHaptic: () -> Unit,
-    onNavigateToSettings: () -> Unit,
+    onNavigateToProfile: () -> Unit,
+    onNavigateToHistory: () -> Unit = {},
 ) {
-    val greeting = remember {
-        val h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        when {
-            h < 12 -> "Good morning,"
-            h < 17 -> "Good afternoon,"
-            else   -> "Good evening,"
-        }
-    }
-    val subtext = when {
-        sessionCount == 0 -> "Ready to rest?"
-        sessionCount == 1 -> "You returned."
-        sessionCount < 7  -> "Your companion is waiting."
-        else              -> "House Cat knows your evenings."
-    }
-
+    val stats      = remember(recentSessions) { computeHomeStats(recentSessions) }
     val entryAlpha by animateFloatAsState(1f, tween(900), label = "homeFade")
 
     Box(Modifier.fillMaxSize().alpha(entryAlpha)) {
@@ -118,8 +165,8 @@ fun HomeScreen(
                 FloatingNavBar(
                     onHome      = {},
                     onSessions  = onSelectHouseCat,
-                    onFavorites = {},
-                    onProfile   = onNavigateToSettings,
+                    onFavorites = onNavigateToHistory,
+                    onProfile   = onNavigateToProfile,
                 )
             },
         ) { innerPadding ->
@@ -127,71 +174,19 @@ fun HomeScreen(
                 modifier        = Modifier.fillMaxSize().padding(innerPadding).statusBarsPadding(),
                 contentPadding  = PaddingValues(bottom = 16.dp),
             ) {
-                item { GreetingHeader(greeting, subtext, onNavigateToSettings) }
-                item { Spacer(Modifier.height(14.dp)) }
+                item { Spacer(Modifier.height(24.dp)) }
                 item { HeroCard(onSelectHouseCat) }
                 item { Spacer(Modifier.height(16.dp)) }
-                item { RhythmSection(sessionCount) }
+                item { RhythmSection(stats) }
                 item { Spacer(Modifier.height(12.dp)) }
-                item { StatCardsRow(sessionCount) }
+                item { StatCardsRow(stats) }
                 item { Spacer(Modifier.height(12.dp)) }
-                item { CompanionCard(sessionCount) }
+                item { CompanionCard(stats.sessionCount) }
             }
         }
-    }
-}
 
-// ── Greeting ──────────────────────────────────────────────────────────────────
-
-@Composable
-private fun GreetingHeader(
-    greeting: String,
-    subtext: String,
-    onNavigateToSettings: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp)
-            .padding(top = 20.dp, bottom = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment     = Alignment.Top,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text  = greeting,
-                style = MaterialTheme.typography.headlineLarge.copy(
-                    fontSize   = 30.sp,
-                    fontWeight = FontWeight.Normal,
-                    lineHeight = 36.sp,
-                ),
-                color = ColorMoonlitCream,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text  = subtext,
-                style = MaterialTheme.typography.bodyMedium,
-                color = ColorTextSecondary.copy(alpha = 0.78f),
-            )
-        }
-        // Circled settings gear (matches inspo)
-        Box(
-            modifier = Modifier
-                .size(42.dp)
-                .border(1.dp, ColorMoonlitCream.copy(alpha = 0.28f), CircleShape)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication        = null,
-                    onClick           = onNavigateToSettings,
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector     = Icons.Outlined.Settings,
-                contentDescription = "Settings",
-                tint            = ColorMoonlitCream.copy(alpha = 0.68f),
-                modifier        = Modifier.size(18.dp),
-            )
+        if (pendingBondDelta > 0) {
+            BondDeltaToast(delta = pendingBondDelta, onDone = onBondDeltaConsumed)
         }
     }
 }
@@ -249,7 +244,7 @@ private fun HeroCard(onSelectHouseCat: () -> Unit) {
                 Spacer(Modifier.height(10.dp))
                 // Headline — 34 sp matches inspo proportions
                 Text(
-                    text       = "Soft purrs.\nDeeper rest.",
+                    text       = "Soft purrs,\nDeeper rest",
                     style      = MaterialTheme.typography.displayMedium.copy(
                         fontSize   = 34.sp,
                         lineHeight = 42.sp,
@@ -339,13 +334,12 @@ private fun HouseCatBadge() {
 // ── Rhythm Section ────────────────────────────────────────────────────────────
 
 @Composable
-private fun RhythmSection(sessionCount: Int) {
+private fun RhythmSection(stats: HomeStats) {
     val todayIndex = remember {
         // Calendar: Sun=1 Mon=2 … Sat=7 → map Mon=0 … Sun=6
         (Calendar.getInstance().get(Calendar.DAY_OF_WEEK) + 5) % 7
     }
 
-    // Horizontal layout: text left, day grid right — exactly as inspo
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -355,7 +349,6 @@ private fun RhythmSection(sessionCount: Int) {
             .padding(horizontal = 20.dp, vertical = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Left: rhythm text
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text  = "Your rhythm",
@@ -364,7 +357,7 @@ private fun RhythmSection(sessionCount: Int) {
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text  = "${sessionCount.coerceAtLeast(0)} nights",
+                text  = "${stats.thisWeekCount} nights",
                 style = MaterialTheme.typography.headlineLarge.copy(
                     fontSize   = 22.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -372,11 +365,16 @@ private fun RhythmSection(sessionCount: Int) {
                 ),
                 color = ColorPrimary,
             )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text  = "this week",
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                color = ColorTextTertiary.copy(alpha = 0.45f),
+            )
         }
 
         Spacer(Modifier.width(16.dp))
 
-        // Right: M T W T F S S labels + dots beneath
         Column(horizontalAlignment = Alignment.End) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 DAY_LABELS.forEach { d ->
@@ -393,7 +391,7 @@ private fun RhythmSection(sessionCount: Int) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 DAY_LABELS.forEachIndexed { idx, _ ->
                     val isToday = idx == todayIndex
-                    val filled  = idx <= todayIndex && (todayIndex - idx) < sessionCount.coerceAtMost(7)
+                    val filled  = idx <= todayIndex && stats.weekBarFractions[idx] > 0f
                     DayDot(isToday = isToday, filled = filled, size = 22.dp)
                 }
             }
@@ -424,16 +422,16 @@ private fun DayDot(isToday: Boolean, filled: Boolean, size: Dp = 22.dp) {
 // ── Stat Cards — equal height, darker, with charts ────────────────────────────
 
 @Composable
-private fun StatCardsRow(sessionCount: Int) {
-    val totalMin = sessionCount * 47
+private fun StatCardsRow(stats: HomeStats) {
+    val totalMin = stats.totalDurationMin
     val timeStr  = when {
         totalMin == 0  -> "0m"
         totalMin < 60  -> "${totalMin}m"
         totalMin < 600 -> "${totalMin / 60}h ${totalMin % 60}m"
         else           -> "${totalMin / 60}h"
     }
+    val n = stats.sessionCount
 
-    // Fixed height so both cards are always equal (matching inspo)
     Row(
         modifier              = Modifier.fillMaxWidth().padding(horizontal = 20.dp).height(175.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -444,14 +442,13 @@ private fun StatCardsRow(sessionCount: Int) {
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
             Column {
-                // Value (left) + Icon (right)
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment     = Alignment.CenterVertically,
                 ) {
                     Text(
-                        "$sessionCount",
+                        "${stats.thisWeekCount}",
                         style = MaterialTheme.typography.headlineLarge.copy(fontSize = 38.sp, fontWeight = FontWeight.Bold),
                         color = ColorMoonlitCream,
                     )
@@ -464,13 +461,18 @@ private fun StatCardsRow(sessionCount: Int) {
                     color = ColorTextSecondary.copy(alpha = 0.68f),
                 )
                 Spacer(Modifier.height(4.dp))
+                val habit = when {
+                    n == 0 -> "Start your first session\ntonight."
+                    n < 3  -> "You're building a\nbeautiful rest habit."
+                    else   -> "A beautiful rest habit\nis forming."
+                }
                 Text(
-                    "You're building a\nbeautiful rest habit.",
+                    habit,
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 11.sp, lineHeight = 15.sp),
                     color = ColorTextSecondary.copy(alpha = 0.62f),
                 )
             }
-            BarChart(sessionCount = sessionCount)
+            BarChart(fractions = stats.weekBarFractions)
         }
 
         // Time card
@@ -479,7 +481,6 @@ private fun StatCardsRow(sessionCount: Int) {
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
             Column {
-                // Value (left) + Icon (right)
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -503,12 +504,12 @@ private fun StatCardsRow(sessionCount: Int) {
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Across $sessionCount ${if (sessionCount == 1) "session" else "sessions"}",
+                    "Across $n ${if (n == 1) "session" else "sessions"}",
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 11.sp),
                     color = ColorTextSecondary.copy(alpha = 0.62f),
                 )
             }
-            LineGraph()
+            LineGraph(fractions = stats.weekLineFractions)
         }
     }
 }
@@ -529,14 +530,14 @@ private fun IconCircle(icon: ImageVector) {
 }
 
 @Composable
-private fun BarChart(sessionCount: Int) {
+private fun BarChart(fractions: List<Float>) {
     Canvas(modifier = Modifier.fillMaxWidth().height(38.dp)) {
-        val count    = 7
-        val gap      = size.width * 0.055f
-        val barW     = (size.width - gap * (count - 1)) / count
-        BAR_HEIGHTS.forEachIndexed { i, frac ->
-            val active = i < sessionCount.coerceAtMost(count)
-            val bh     = size.height * frac
+        val count = fractions.size
+        val gap   = size.width * 0.055f
+        val barW  = (size.width - gap * (count - 1)) / count
+        fractions.forEachIndexed { i, frac ->
+            val active = frac > 0f
+            val bh     = size.height * frac.coerceAtLeast(0.08f)
             val left   = i * (barW + gap)
             val top    = size.height - bh
             drawRoundRect(
@@ -558,20 +559,23 @@ private fun BarChart(sessionCount: Int) {
 }
 
 @Composable
-private fun LineGraph() {
+private fun LineGraph(fractions: List<Float>) {
     Canvas(modifier = Modifier.fillMaxWidth().height(48.dp)) {
         val w = size.width
         val h = size.height
-        val pts = listOf(
-            Offset(0f,         h * 0.72f),
-            Offset(w * 0.15f,  h * 0.82f),
-            Offset(w * 0.30f,  h * 0.58f),
-            Offset(w * 0.45f,  h * 0.68f),
-            Offset(w * 0.60f,  h * 0.42f),
-            Offset(w * 0.75f,  h * 0.52f),
-            Offset(w * 0.88f,  h * 0.28f),
-            Offset(w,          h * 0.12f),
-        )
+        if (fractions.isEmpty()) return@Canvas
+
+        val stepX = w / (fractions.size - 1).coerceAtLeast(1).toFloat()
+        val pts   = fractions.mapIndexed { i, frac ->
+            // invert: frac=0 → bottom, frac=1 → top
+            Offset(i * stepX, h * (1f - frac * 0.88f))
+        }
+
+        if (pts.size == 1) {
+            drawCircle(ColorPrimary, 4.dp.toPx(), pts[0])
+            return@Canvas
+        }
+
         val path = Path().apply {
             moveTo(pts[0].x, pts[0].y)
             for (i in 0 until pts.size - 1) {
@@ -700,6 +704,50 @@ private fun BondCircle(bond: Int) {
     }
 }
 
+// ── Bond Delta Toast ──────────────────────────────────────────────────────────
+
+@Composable
+private fun BondDeltaToast(delta: Int, onDone: () -> Unit) {
+    var visible by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        visible = true
+        delay(2200)
+        visible = false
+        delay(500)
+        onDone()
+    }
+
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(if (visible) 350 else 500),
+        label = "bondDeltaAlpha",
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .navigationBarsPadding()
+            .padding(bottom = 90.dp),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        Box(
+            modifier = Modifier
+                .alpha(alpha)
+                .clip(RoundedCornerShape(50.dp))
+                .background(Color(0xFFBB7C34))
+                .padding(horizontal = 18.dp, vertical = 9.dp),
+        ) {
+            Text(
+                text = "+$delta bond",
+                style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp),
+                color = Color(0xFF1A0E05),
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
 // ── Floating Bottom Navigation ─────────────────────────────────────────────────
 
 @Composable
@@ -724,10 +772,10 @@ private fun FloatingNavBar(
                 .padding(vertical = 12.dp, horizontal = 8.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
-            NavItem(icon = Icons.Filled.Home,             label = "Home",      active = true,  onClick = onHome)
-            NavItem(icon = Icons.Filled.NightsStay,        label = "Sessions",  active = false, onClick = onSessions)
-            NavItem(icon = Icons.Outlined.Favorite,        label = "Favorites", active = false, onClick = onFavorites)
-            NavItem(icon = Icons.Filled.Person,            label = "Profile",   active = false, onClick = onProfile)
+            NavItem(icon = Icons.Filled.Home,             label = "Home",    active = true,  onClick = onHome)
+            NavItem(icon = Icons.Filled.Pets,        label = "Purr",   active = false, onClick = onSessions)
+            NavItem(icon = Icons.Filled.NightsStay,  label = "Nights", active = false, onClick = onFavorites)
+            NavItem(icon = Icons.Filled.Person,           label = "Profile", active = false, onClick = onProfile)
         }
     }
 }
